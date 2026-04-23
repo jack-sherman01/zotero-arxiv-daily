@@ -5,7 +5,7 @@ from datetime import datetime
 import pytest
 from omegaconf import OmegaConf
 
-from zotero_arxiv_daily.executor import Executor, normalize_path_patterns
+from zotero_arxiv_daily.executor import Executor, _resolve_sources, normalize_path_patterns
 from zotero_arxiv_daily.protocol import CorpusPaper
 
 
@@ -43,6 +43,52 @@ def test_normalize_path_patterns_accepts_empty_list():
 
 def test_normalize_path_patterns_accepts_none():
     assert normalize_path_patterns(None, "include_path") is None
+
+
+# ---------------------------------------------------------------------------
+# _resolve_sources
+# ---------------------------------------------------------------------------
+
+
+def _make_source_config(executor_source=None, arxiv_category=None, biorxiv_category=None, medrxiv_category=None):
+    """Build a minimal OmegaConf config for _resolve_sources testing."""
+    cfg = OmegaConf.create({
+        "executor": {
+            "source": executor_source if executor_source is not None else "???",
+        },
+        "source": {
+            "arxiv": {"category": arxiv_category},
+            "biorxiv": {"category": biorxiv_category},
+            "medrxiv": {"category": medrxiv_category},
+        },
+    })
+    return cfg
+
+
+def test_resolve_sources_uses_explicit_config():
+    cfg = _make_source_config(executor_source=["arxiv", "biorxiv"])
+    assert _resolve_sources(cfg) == ["arxiv", "biorxiv"]
+
+
+def test_resolve_sources_autodetects_from_arxiv_category():
+    cfg = _make_source_config(arxiv_category=["cs.AI", "cs.LG"])
+    assert _resolve_sources(cfg) == ["arxiv"]
+
+
+def test_resolve_sources_autodetects_multiple_sources():
+    cfg = _make_source_config(arxiv_category=["cs.AI"], biorxiv_category=["bioinformatics"])
+    assert _resolve_sources(cfg) == ["arxiv", "biorxiv"]
+
+
+def test_resolve_sources_defaults_to_arxiv_when_nothing_configured():
+    cfg = _make_source_config()
+    assert _resolve_sources(cfg) == ["arxiv"]
+
+
+def test_resolve_sources_ignores_null_categories():
+    cfg = _make_source_config(biorxiv_category=None, medrxiv_category=None)
+    # arxiv.category is also null, nothing detected -> defaults to ['arxiv']
+    assert _resolve_sources(cfg) == ["arxiv"]
 
 
 # ---------------------------------------------------------------------------
